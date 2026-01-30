@@ -33,15 +33,24 @@ cp .env.example .env
 
 ### 3. Set Up Database
 ```bash
-# Railway will provide DATABASE_URL automatically
-# Run schema setup:
+# Initial setup:
 psql $DATABASE_URL < database/schema.sql
-
-# Import historical sales data:
 node database/import-sales.js
 ```
 
-### 4. Start Server
+### 4. Weekly Data Updates
+```bash
+# Export fresh sales-data.csv from your DMS
+# Place it in project root, then:
+./scripts/weekly-update.sh
+
+# This will:
+# - Backup existing data
+# - Import new/updated records (upsert logic)
+# - Show updated stats
+```
+
+### 5. Start Server
 ```bash
 npm start
 ```
@@ -102,11 +111,31 @@ curl https://autointel-production.up.railway.app/api/status
 
 ## Roadmap
 
-- [x] Historical sales import
-- [x] Runlist upload
-- [x] Matching algorithm
-- [ ] CSV parsing for runlists
-- [ ] AUTONIQ scraper integration
-- [ ] Dashboard UI
-- [ ] User authentication
+- [x] Historical sales import (2,013 records)
+- [x] Weekly data updates (upsert script)
+- [x] CSV parsing for runlists
+- [x] Runlist upload API
+- [x] Matching algorithm (4 strength levels)
+- [ ] AUTONIQ scraper integration (Phase 3)
+- [ ] Dashboard UI (Phase 4)
+- [ ] User authentication (Phase 5)
 - [ ] Export results
+
+## Quick Start
+
+### Upload a Runlist
+
+```bash
+curl -X POST http://localhost:3000/api/runlist/upload \
+  -F "file=@your-runlist.csv" \
+  -F "auction_name=Americas Auto Auction - Atlanta Cartersville, GA" \
+  -F "auction_date=2026-02-05"
+```
+
+### View Results
+
+```bash
+curl http://localhost:3000/api/runlist/1
+```
+
+**See:** [RUNLIST_UPLOAD_GUIDE.md](RUNLIST_UPLOAD_GUIDE.md) for full API documentation.

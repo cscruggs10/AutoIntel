@@ -34,6 +34,7 @@ async function importSales() {
   });
   
   let imported = 0;
+  let updated = 0;
   let errors = 0;
   
   for (const record of records) {
@@ -101,7 +102,8 @@ async function importSales() {
     }
     
     try {
-      await pool.query(`
+      // Upsert: Insert or update if VIN + stock_nbr combo exists
+      const result = await pool.query(`
         INSERT INTO historical_sales (
           date_sold, posting_date, stock_nbr, vin, stock_date,
           year, make, model, book_value,
@@ -113,6 +115,43 @@ async function importSales() {
           days_to_sell, location, branch_nbr, purchased_from, primary_name,
           finder_name, salesman_code, class
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
+        ON CONFLICT (vin, stock_nbr) 
+        DO UPDATE SET
+          date_sold = EXCLUDED.date_sold,
+          posting_date = EXCLUDED.posting_date,
+          stock_date = EXCLUDED.stock_date,
+          year = EXCLUDED.year,
+          make = EXCLUDED.make,
+          model = EXCLUDED.model,
+          book_value = EXCLUDED.book_value,
+          purchase_price = EXCLUDED.purchase_price,
+          total_repairs = EXCLUDED.total_repairs,
+          finder_fee = EXCLUDED.finder_fee,
+          after_sale_repairs = EXCLUDED.after_sale_repairs,
+          total_cost = EXCLUDED.total_cost,
+          sales_price = EXCLUDED.sales_price,
+          doc_fee = EXCLUDED.doc_fee,
+          sales_commission = EXCLUDED.sales_commission,
+          sales_tax_amt = EXCLUDED.sales_tax_amt,
+          sales_type = EXCLUDED.sales_type,
+          gross_profit = EXCLUDED.gross_profit,
+          net_profit = EXCLUDED.net_profit,
+          original_balance = EXCLUDED.original_balance,
+          balance_remaining = EXCLUDED.balance_remaining,
+          amount_financed = EXCLUDED.amount_financed,
+          apr = EXCLUDED.apr,
+          credit_score = EXCLUDED.credit_score,
+          total_trade_acv = EXCLUDED.total_trade_acv,
+          trade_amount = EXCLUDED.trade_amount,
+          days_to_sell = EXCLUDED.days_to_sell,
+          location = EXCLUDED.location,
+          branch_nbr = EXCLUDED.branch_nbr,
+          purchased_from = EXCLUDED.purchased_from,
+          primary_name = EXCLUDED.primary_name,
+          finder_name = EXCLUDED.finder_name,
+          salesman_code = EXCLUDED.salesman_code,
+          class = EXCLUDED.class
+        RETURNING (xmax = 0) AS inserted
       `, [
         data.date_sold, data.posting_date, data.stock_nbr, data.vin, data.stock_date,
         data.year, data.make, data.model, data.book_value,
@@ -125,10 +164,14 @@ async function importSales() {
         data.finder_name, data.salesman_code, data.class
       ]);
       
-      imported++;
+      if (result.rows[0].inserted) {
+        imported++;
+      } else {
+        updated++;
+      }
       
-      if (imported % 100 === 0) {
-        console.log(`Imported ${imported} records...`);
+      if ((imported + updated) % 100 === 0) {
+        console.log(`Processed ${imported + updated} records (${imported} new, ${updated} updated)...`);
       }
     } catch (err) {
       errors++;
@@ -139,7 +182,8 @@ async function importSales() {
   }
   
   console.log(`\n✅ Import complete!`);
-  console.log(`   Imported: ${imported}`);
+  console.log(`   New records: ${imported}`);
+  console.log(`   Updated: ${updated}`);
   console.log(`   Errors: ${errors}`);
   
   await pool.end();
