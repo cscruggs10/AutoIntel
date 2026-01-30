@@ -399,7 +399,7 @@
     let detectedColumns = [];
 
     const requiredFields = ['vin', 'year', 'make', 'model'];
-    const optionalFields = ['mileage', 'lane', 'lot', 'run_number', 'exterior_color', 'interior_color', 'grade', 'mmr_value', 'trim'];
+    const optionalFields = ['mileage', 'lane', 'lot', 'run_number', 'exterior_color', 'interior_color', 'grade', 'mmr_value'];
 
     // Initialize
     auctionDate.valueAsDate = new Date();
@@ -741,8 +741,7 @@
         exterior_color: ['exterior color', 'ext color', 'color'],
         interior_color: ['interior color', 'int color'],
         grade: ['grade', 'condition report grade', 'cr grade'],
-        mmr_value: ['mmr', 'mmr value'],
-        trim: ['trim', 'style']
+        mmr_value: ['mmr', 'mmr value']
       };
 
       for (const [field, aliases] of Object.entries(mappings)) {
