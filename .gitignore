@@ -37,3 +37,5 @@ MARKETING_AGENT.md
 projects/
 JOURNAL_WEB_UI.md
 README-WEB-UI.md
+routes/journal.js
+public/journal.html

@@ -8,6 +8,14 @@ const fs = require('fs');
 
 const apiRoutes = require('./routes/api');
 
+// Load journal routes if available (local only, not in repo)
+let journalRoutes;
+try {
+  journalRoutes = require('./routes/journal');
+} catch (err) {
+  // Journal routes not available (optional feature)
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -42,6 +50,14 @@ app.use(session({
 
 // API Routes
 app.use('/api', apiRoutes);
+
+// Journal routes (optional, local only)
+if (journalRoutes) {
+  app.use('/api/journal', journalRoutes);
+  app.get('/journal', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'journal.html'));
+  });
+}
 
 // Routes
 app.get('/', (req, res) => {
