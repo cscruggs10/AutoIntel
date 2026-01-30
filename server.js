@@ -6,6 +6,8 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+const apiRoutes = require('./routes/api');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -37,6 +39,9 @@ app.use(session({
   saveUninitialized: false,
   cookie: { secure: process.env.NODE_ENV === 'production' }
 }));
+
+// API Routes
+app.use('/api', apiRoutes);
 
 // Routes
 app.get('/', (req, res) => {

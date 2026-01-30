@@ -1,6 +1,9 @@
 const express = require('express');
 const multer = require('multer');
 const { Pool } = require('pg');
+const { spawn } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 const { parseRunlist, getSupportedAuctions } = require('../lib/runlist-parser');
 const { matchRunlist } = require('../lib/matcher');
 const router = express.Router();
@@ -101,15 +104,14 @@ router.post('/runlist/upload', upload.single('file'), async (req, res) => {
       ]);
     }
     
-    // Start matching process (async)
-    matchRunlist(runlistId).catch(err => {
-      console.error('Matching error:', err);
-    });
-    
-    res.json({ 
+    // Run matching synchronously so results are ready
+    const matchResults = await matchRunlist(runlistId);
+
+    res.json({
       success: true,
       runlist: runlistResult.rows[0],
-      message: `Uploaded ${vehicles.length} vehicles. Matching against historical data...`,
+      matchResults,
+      message: `Uploaded ${vehicles.length} vehicles. Found ${matchResults.matched} matches.`,
       next_step: `GET /api/runlist/${runlistId} to view results`
     });
   } catch (err) {
@@ -172,12 +174,152 @@ router.get('/runlist/:id', async (req, res) => {
 router.get('/runlists', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT * FROM runlists 
+      SELECT * FROM runlists
       ORDER BY uploaded_at DESC
     `);
-    
+
     res.json({ runlists: result.rows });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Scrape matched vehicles for a runlist
+router.post('/runlist/:id/scrape', async (req, res) => {
+  const runlistId = req.params.id;
+
+  try {
+    // Get runlist info
+    const runlistResult = await pool.query(
+      'SELECT * FROM runlists WHERE id = $1',
+      [runlistId]
+    );
+
+    if (runlistResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Runlist not found' });
+    }
+
+    const runlist = runlistResult.rows[0];
+
+    // Get vehicles that need scraping
+    const vehiclesResult = await pool.query(`
+      SELECT id, vin, year, make, model
+      FROM runlist_vehicles
+      WHERE runlist_id = $1 AND needs_scraping = true
+    `, [runlistId]);
+
+    const vehicles = vehiclesResult.rows;
+
+    if (vehicles.length === 0) {
+      return res.status(400).json({ error: 'No vehicles to scrape' });
+    }
+
+    // Set headers for Server-Sent Events
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Create temp CSV with VINs to scrape
+    const tempCsvPath = path.join(__dirname, '..', 'uploads', `scrape-${runlistId}-${Date.now()}.csv`);
+    const csvContent = 'Vin,Year,Make,Model\n' +
+      vehicles.map(v => `${v.vin},${v.year},${v.make},${v.model}`).join('\n');
+    fs.writeFileSync(tempCsvPath, csvContent);
+
+    const auctionName = `${runlist.auction_name} (${runlist.auction_date})`;
+
+    // Spawn scraper process
+    const scraperPath = path.join(__dirname, '..', 'auction-scraper', 'autoniq-scraper.js');
+    const scraper = spawn('node', [scraperPath, tempCsvPath, auctionName]);
+
+    let processed = 0;
+    let errors = 0;
+    const total = vehicles.length;
+    const startTime = Date.now();
+
+    res.write(`data: ${JSON.stringify({ progress: 0, message: `Starting scrape of ${total} matched vehicles...` })}\n\n`);
+
+    scraper.stdout.on('data', (data) => {
+      const text = data.toString();
+      console.log(text);
+
+      // Count processed
+      if (text.includes('✓') && text.includes('announcements found')) {
+        processed++;
+        const progress = Math.min(95, Math.floor((processed / total) * 100));
+        res.write(`data: ${JSON.stringify({
+          progress,
+          message: `Scraping: ${processed}/${total} vehicles`
+        })}\n\n`);
+      }
+
+      if (text.includes('✓') && text.includes('already scraped')) {
+        processed++;
+        const progress = Math.min(95, Math.floor((processed / total) * 100));
+        res.write(`data: ${JSON.stringify({
+          progress,
+          message: `Scraping: ${processed}/${total} vehicles (cached)`
+        })}\n\n`);
+      }
+
+      // Count errors
+      if (text.includes('✗') && text.includes('Error:')) {
+        errors++;
+      }
+
+      // Completion
+      if (text.includes('=== Scraping Complete ===')) {
+        const duration = Math.floor((Date.now() - startTime) / 1000);
+
+        // Update runlist status
+        pool.query(
+          'UPDATE runlists SET status = $1 WHERE id = $2',
+          ['scraped', runlistId]
+        ).catch(console.error);
+
+        // Mark vehicles as scraped
+        pool.query(
+          'UPDATE runlist_vehicles SET needs_scraping = false WHERE runlist_id = $1 AND needs_scraping = true',
+          [runlistId]
+        ).catch(console.error);
+
+        res.write(`data: ${JSON.stringify({
+          progress: 100,
+          complete: true,
+          processed,
+          errors,
+          total,
+          duration,
+          message: 'Scraping complete!'
+        })}\n\n`);
+      }
+    });
+
+    scraper.stderr.on('data', (data) => {
+      console.error('Scraper error:', data.toString());
+    });
+
+    scraper.on('close', (code) => {
+      // Clean up temp file
+      fs.unlink(tempCsvPath, () => {});
+
+      if (code !== 0) {
+        res.write(`data: ${JSON.stringify({
+          error: 'Scraper process exited with code ' + code
+        })}\n\n`);
+      }
+      res.end();
+    });
+
+    scraper.on('error', (err) => {
+      console.error('Failed to start scraper:', err);
+      res.write(`data: ${JSON.stringify({
+        error: 'Failed to start scraper: ' + err.message
+      })}\n\n`);
+      res.end();
+    });
+
+  } catch (err) {
+    console.error('Scrape error:', err);
     res.status(500).json({ error: err.message });
   }
 });

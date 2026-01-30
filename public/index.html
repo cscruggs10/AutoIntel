@@ -14,7 +14,7 @@
       color: #333;
     }
     .container {
-      max-width: 800px;
+      max-width: 900px;
       margin: 0 auto;
       background: white;
       padding: 2rem;
@@ -29,6 +29,30 @@
     .subtitle {
       color: #666;
       margin-bottom: 2rem;
+    }
+    .step {
+      display: none;
+    }
+    .step.active {
+      display: block;
+    }
+    .step-indicator {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 2rem;
+      gap: 1rem;
+    }
+    .step-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #e5e7eb;
+    }
+    .step-dot.active {
+      background: #667eea;
+    }
+    .step-dot.completed {
+      background: #10b981;
     }
     .upload-section {
       border: 2px dashed #667eea;
@@ -59,14 +83,14 @@
       margin-bottom: 0.5rem;
       color: #374151;
     }
-    input[type="text"], input[type="date"] {
+    input[type="text"], input[type="date"], select {
       width: 100%;
       padding: 0.75rem;
       border: 1px solid #d1d5db;
       border-radius: 8px;
       font-size: 1rem;
     }
-    input:focus {
+    input:focus, select:focus {
       outline: none;
       border-color: #667eea;
       box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
@@ -77,8 +101,7 @@
       gap: 1rem;
     }
     button {
-      width: 100%;
-      padding: 1rem;
+      padding: 1rem 2rem;
       background: #667eea;
       color: white;
       border: none;
@@ -95,6 +118,20 @@
       background: #9ca3af;
       cursor: not-allowed;
     }
+    button.secondary {
+      background: #6b7280;
+    }
+    button.success {
+      background: #10b981;
+    }
+    .button-row {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    .button-row button {
+      flex: 1;
+    }
     .file-info {
       margin-top: 1rem;
       padding: 1rem;
@@ -104,7 +141,6 @@
     }
     .progress {
       margin-top: 1.5rem;
-      display: none;
     }
     .progress-bar {
       width: 100%;
@@ -124,86 +160,234 @@
       color: #666;
       font-size: 0.9rem;
     }
-    .results {
-      margin-top: 2rem;
-      display: none;
-      padding: 1rem;
-      background: #ecfdf5;
-      border-radius: 8px;
-      border-left: 4px solid #10b981;
+    .match-results {
+      margin-top: 1.5rem;
     }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .stat-card {
+      background: #f9fafb;
+      padding: 1rem;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .stat-card .value {
+      font-size: 2rem;
+      font-weight: bold;
+      color: #667eea;
+    }
+    .stat-card .label {
+      color: #666;
+      font-size: 0.9rem;
+    }
+    .stat-card.highlight {
+      background: #ecfdf5;
+      border: 2px solid #10b981;
+    }
+    .stat-card.highlight .value {
+      color: #10b981;
+    }
+    .vehicle-list {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+    }
+    .vehicle-item {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .vehicle-item:last-child {
+      border-bottom: none;
+    }
+    .vehicle-item .info {
+      font-weight: 500;
+    }
+    .vehicle-item .meta {
+      color: #666;
+      font-size: 0.85rem;
+    }
+    .badge {
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge.exact { background: #10b981; color: white; }
+    .badge.strong { background: #3b82f6; color: white; }
+    .badge.moderate { background: #f59e0b; color: white; }
+    .badge.weak { background: #6b7280; color: white; }
     .error {
       margin-top: 1rem;
-      display: none;
       padding: 1rem;
       background: #fef2f2;
       border-radius: 8px;
       border-left: 4px solid #ef4444;
       color: #991b1b;
     }
+    .results {
+      margin-top: 2rem;
+      padding: 1rem;
+      background: #ecfdf5;
+      border-radius: 8px;
+      border-left: 4px solid #10b981;
+    }
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: #374151;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>🚗 AutoIntel</h1>
-    <p class="subtitle">Upload runlists and scrape auction announcement data</p>
-    
-    <div class="upload-section" id="uploadZone">
-      <div id="uploadPrompt">
-        <h3 style="color: #667eea; margin-bottom: 0.5rem;">📋 Drop CSV file here</h3>
-        <p style="color: #666;">or click to browse</p>
-      </div>
-      <div id="fileInfo" class="file-info" style="display: none;"></div>
-      <input type="file" id="fileInput" accept=".csv">
+    <h1>AutoIntel</h1>
+    <p class="subtitle">Upload runlists, match against history, scrape announcement data</p>
+
+    <div class="step-indicator">
+      <div class="step-dot active" id="dot1"></div>
+      <div class="step-dot" id="dot2"></div>
+      <div class="step-dot" id="dot3"></div>
     </div>
 
-    <div class="row">
-      <div class="form-group">
-        <label for="auctionName">Auction Name</label>
-        <input type="text" id="auctionName" placeholder="e.g., United Auto Exchange Memphis" required>
+    <!-- Step 1: Upload -->
+    <div class="step active" id="step1">
+      <h2 class="section-title">Step 1: Upload Runlist</h2>
+
+      <div class="upload-section" id="uploadZone">
+        <div id="uploadPrompt">
+          <h3 style="color: #667eea; margin-bottom: 0.5rem;">Drop CSV file here</h3>
+          <p style="color: #666;">or click to browse</p>
+        </div>
+        <div id="fileInfo" class="file-info" style="display: none;"></div>
+        <input type="file" id="fileInput" accept=".csv">
       </div>
-      <div class="form-group">
-        <label for="auctionDate">Runlist Date</label>
-        <input type="date" id="auctionDate" required>
+
+      <div class="row">
+        <div class="form-group">
+          <label for="auctionName">Auction Name</label>
+          <input type="text" id="auctionName" placeholder="e.g., Americas Auto Auction Dallas" required>
+        </div>
+        <div class="form-group">
+          <label for="auctionDate">Auction Date</label>
+          <input type="date" id="auctionDate" required>
+        </div>
+      </div>
+
+      <button id="uploadBtn" disabled style="width: 100%;">Upload & Match Against History</button>
+
+      <div class="progress" id="uploadProgress" style="display: none;">
+        <div class="progress-bar">
+          <div class="progress-fill" id="uploadProgressFill"></div>
+        </div>
+        <div class="progress-text" id="uploadProgressText">Uploading...</div>
+      </div>
+
+      <div class="error" id="uploadError" style="display: none;"></div>
+    </div>
+
+    <!-- Step 2: Review Matches -->
+    <div class="step" id="step2">
+      <h2 class="section-title">Step 2: Review Matches</h2>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="value" id="totalCount">0</div>
+          <div class="label">Total Vehicles</div>
+        </div>
+        <div class="stat-card highlight">
+          <div class="value" id="matchedCount">0</div>
+          <div class="label">Matched (to scrape)</div>
+        </div>
+        <div class="stat-card">
+          <div class="value" id="unmatchedCount">0</div>
+          <div class="label">No History</div>
+        </div>
+      </div>
+
+      <p class="section-title">Matched Vehicles (will be scraped for announcements)</p>
+      <div class="vehicle-list" id="matchedList"></div>
+
+      <div class="button-row">
+        <button class="secondary" id="backBtn">Back</button>
+        <button class="success" id="scrapeBtn">Scrape Matched Vehicles</button>
       </div>
     </div>
 
-    <button id="startBtn" disabled>Start Scraping</button>
+    <!-- Step 3: Scraping -->
+    <div class="step" id="step3">
+      <h2 class="section-title">Step 3: Scraping Announcements</h2>
 
-    <div class="progress" id="progress">
-      <div class="progress-bar">
-        <div class="progress-fill" id="progressFill"></div>
+      <div class="progress" id="scrapeProgress">
+        <div class="progress-bar">
+          <div class="progress-fill" id="scrapeProgressFill"></div>
+        </div>
+        <div class="progress-text" id="scrapeProgressText">Initializing scraper...</div>
       </div>
-      <div class="progress-text" id="progressText">Initializing...</div>
-    </div>
 
-    <div class="results" id="results"></div>
-    <div class="error" id="error"></div>
+      <div class="results" id="scrapeResults" style="display: none;"></div>
+
+      <div class="button-row" id="finishButtons" style="display: none;">
+        <button id="newUploadBtn" style="width: 100%;">Upload Another Runlist</button>
+      </div>
+    </div>
   </div>
 
   <script>
+    // Elements
     const uploadZone = document.getElementById('uploadZone');
     const fileInput = document.getElementById('fileInput');
     const uploadPrompt = document.getElementById('uploadPrompt');
     const fileInfo = document.getElementById('fileInfo');
     const auctionName = document.getElementById('auctionName');
     const auctionDate = document.getElementById('auctionDate');
-    const startBtn = document.getElementById('startBtn');
-    const progress = document.getElementById('progress');
-    const progressFill = document.getElementById('progressFill');
-    const progressText = document.getElementById('progressText');
-    const results = document.getElementById('results');
-    const error = document.getElementById('error');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const uploadProgress = document.getElementById('uploadProgress');
+    const uploadProgressFill = document.getElementById('uploadProgressFill');
+    const uploadProgressText = document.getElementById('uploadProgressText');
+    const uploadError = document.getElementById('uploadError');
+
+    const backBtn = document.getElementById('backBtn');
+    const scrapeBtn = document.getElementById('scrapeBtn');
+    const matchedList = document.getElementById('matchedList');
+
+    const scrapeProgressFill = document.getElementById('scrapeProgressFill');
+    const scrapeProgressText = document.getElementById('scrapeProgressText');
+    const scrapeResults = document.getElementById('scrapeResults');
+    const finishButtons = document.getElementById('finishButtons');
+    const newUploadBtn = document.getElementById('newUploadBtn');
 
     let selectedFile = null;
+    let currentRunlistId = null;
+    let currentStep = 1;
 
-    // Set default date to today
+    // Set default date
     auctionDate.valueAsDate = new Date();
 
-    // Upload zone click
+    // Step management
+    function goToStep(step) {
+      currentStep = step;
+      document.querySelectorAll('.step').forEach((el, i) => {
+        el.classList.toggle('active', i + 1 === step);
+      });
+      document.querySelectorAll('.step-dot').forEach((el, i) => {
+        el.classList.remove('active', 'completed');
+        if (i + 1 === step) el.classList.add('active');
+        if (i + 1 < step) el.classList.add('completed');
+      });
+    }
+
+    // Upload zone
     uploadZone.addEventListener('click', () => fileInput.click());
 
-    // Drag and drop
     uploadZone.addEventListener('dragover', (e) => {
       e.preventDefault();
       uploadZone.classList.add('dragover');
@@ -216,13 +400,11 @@
     uploadZone.addEventListener('drop', (e) => {
       e.preventDefault();
       uploadZone.classList.remove('dragover');
-      const files = e.dataTransfer.files;
-      if (files.length > 0) {
-        handleFile(files[0]);
+      if (e.dataTransfer.files.length > 0) {
+        handleFile(e.dataTransfer.files[0]);
       }
     });
 
-    // File input change
     fileInput.addEventListener('change', (e) => {
       if (e.target.files.length > 0) {
         handleFile(e.target.files[0]);
@@ -231,52 +413,131 @@
 
     function handleFile(file) {
       if (!file.name.endsWith('.csv')) {
-        showError('Please select a CSV file');
+        showUploadError('Please select a CSV file');
         return;
       }
-
       selectedFile = file;
       uploadPrompt.style.display = 'none';
       fileInfo.style.display = 'block';
-      fileInfo.innerHTML = `
-        <strong>✓ File selected:</strong><br>
-        ${file.name} (${(file.size / 1024).toFixed(1)} KB)
-      `;
+      fileInfo.innerHTML = `<strong>File:</strong> ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
       checkForm();
     }
 
-    // Form validation
     [auctionName, auctionDate].forEach(input => {
       input.addEventListener('input', checkForm);
     });
 
     function checkForm() {
-      const valid = selectedFile && auctionName.value.trim() && auctionDate.value;
-      startBtn.disabled = !valid;
+      uploadBtn.disabled = !(selectedFile && auctionName.value.trim() && auctionDate.value);
     }
 
-    // Start scraping
-    startBtn.addEventListener('click', async () => {
-      if (!selectedFile || !auctionName.value || !auctionDate.value) return;
+    function showUploadError(msg) {
+      uploadError.style.display = 'block';
+      uploadError.textContent = msg;
+    }
 
-      startBtn.disabled = true;
-      progress.style.display = 'block';
-      results.style.display = 'none';
-      error.style.display = 'none';
+    // Upload & Match
+    uploadBtn.addEventListener('click', async () => {
+      uploadBtn.disabled = true;
+      uploadProgress.style.display = 'block';
+      uploadError.style.display = 'none';
+      uploadProgressFill.style.width = '30%';
+      uploadProgressText.textContent = 'Uploading file...';
 
       const formData = new FormData();
       formData.append('file', selectedFile);
-      formData.append('auctionName', auctionName.value.trim());
-      formData.append('auctionDate', auctionDate.value);
+      formData.append('auction_name', auctionName.value.trim());
+      formData.append('auction_date', auctionDate.value);
 
       try {
-        const response = await fetch('/api/scrape', {
+        uploadProgressFill.style.width = '60%';
+        uploadProgressText.textContent = 'Matching against historical data...';
+
+        const response = await fetch('/api/runlist/upload', {
           method: 'POST',
           body: formData
         });
 
+        const data = await response.json();
+
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          throw new Error(data.error || 'Upload failed');
+        }
+
+        uploadProgressFill.style.width = '100%';
+        uploadProgressText.textContent = 'Complete!';
+
+        currentRunlistId = data.runlist.id;
+
+        // Fetch full runlist data
+        setTimeout(() => loadRunlistResults(currentRunlistId), 500);
+
+      } catch (err) {
+        showUploadError(err.message);
+        uploadBtn.disabled = false;
+        uploadProgress.style.display = 'none';
+      }
+    });
+
+    async function loadRunlistResults(runlistId) {
+      try {
+        const response = await fetch(`/api/runlist/${runlistId}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to load results');
+        }
+
+        // Update stats
+        document.getElementById('totalCount').textContent = data.stats.total;
+        document.getElementById('matchedCount').textContent = data.stats.matched;
+        document.getElementById('unmatchedCount').textContent = data.stats.unmatched;
+
+        // Populate matched list
+        const matched = data.vehicles.filter(v => v.matched);
+        matchedList.innerHTML = matched.length > 0
+          ? matched.map(v => `
+              <div class="vehicle-item">
+                <div>
+                  <div class="info">${v.year} ${v.make} ${v.model}</div>
+                  <div class="meta">VIN: ${v.vin} | ${v.mileage ? v.mileage.toLocaleString() + ' mi' : 'N/A'}</div>
+                </div>
+                <span class="badge strong">${v.match_count} matches</span>
+              </div>
+            `).join('')
+          : '<div class="vehicle-item"><div class="info">No matches found</div></div>';
+
+        scrapeBtn.disabled = matched.length === 0;
+        goToStep(2);
+
+      } catch (err) {
+        showUploadError(err.message);
+      }
+    }
+
+    // Back button
+    backBtn.addEventListener('click', () => {
+      goToStep(1);
+      uploadProgress.style.display = 'none';
+      uploadBtn.disabled = false;
+    });
+
+    // Scrape button
+    scrapeBtn.addEventListener('click', async () => {
+      goToStep(3);
+      scrapeProgressFill.style.width = '0%';
+      scrapeProgressText.textContent = 'Starting scraper...';
+      scrapeResults.style.display = 'none';
+      finishButtons.style.display = 'none';
+
+      try {
+        const response = await fetch(`/api/runlist/${currentRunlistId}/scrape`, {
+          method: 'POST'
+        });
+
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Scraping failed');
         }
 
         const reader = response.body.getReader();
@@ -292,14 +553,21 @@
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               const data = JSON.parse(line.slice(6));
-              
+
               if (data.progress !== undefined) {
-                progressFill.style.width = data.progress + '%';
-                progressText.textContent = data.message || `${data.progress}% complete`;
+                scrapeProgressFill.style.width = data.progress + '%';
+                scrapeProgressText.textContent = data.message || `${data.progress}%`;
               }
 
               if (data.complete) {
-                showResults(data);
+                scrapeResults.style.display = 'block';
+                scrapeResults.innerHTML = `
+                  <h3 style="color: #10b981; margin-bottom: 1rem;">Scraping Complete</h3>
+                  <p><strong>Processed:</strong> ${data.processed} vehicles</p>
+                  <p><strong>Errors:</strong> ${data.errors}</p>
+                  <p><strong>Duration:</strong> ${data.duration}s</p>
+                `;
+                finishButtons.style.display = 'block';
               }
 
               if (data.error) {
@@ -310,38 +578,25 @@
         }
 
       } catch (err) {
-        showError(err.message);
-        startBtn.disabled = false;
+        scrapeProgressText.textContent = 'Error: ' + err.message;
+        finishButtons.style.display = 'block';
       }
     });
 
-    function showResults(data) {
-      progress.style.display = 'none';
-      results.style.display = 'block';
-      results.innerHTML = `
-        <h3 style="color: #10b981; margin-bottom: 1rem;">✓ Scraping Complete</h3>
-        <p><strong>Processed:</strong> ${data.processed} vehicles</p>
-        <p><strong>Errors:</strong> ${data.errors}</p>
-        <p><strong>Time:</strong> ${data.duration}s</p>
-      `;
-      
-      // Reset form
-      setTimeout(() => {
-        selectedFile = null;
-        fileInput.value = '';
-        uploadPrompt.style.display = 'block';
-        fileInfo.style.display = 'none';
-        auctionName.value = '';
-        auctionDate.valueAsDate = new Date();
-        startBtn.disabled = true;
-      }, 3000);
-    }
-
-    function showError(message) {
-      error.style.display = 'block';
-      error.textContent = '⚠️ Error: ' + message;
-      progress.style.display = 'none';
-    }
+    // New upload
+    newUploadBtn.addEventListener('click', () => {
+      selectedFile = null;
+      currentRunlistId = null;
+      fileInput.value = '';
+      uploadPrompt.style.display = 'block';
+      fileInfo.style.display = 'none';
+      auctionName.value = '';
+      auctionDate.valueAsDate = new Date();
+      uploadBtn.disabled = true;
+      uploadProgress.style.display = 'none';
+      uploadError.style.display = 'none';
+      goToStep(1);
+    });
   </script>
 </body>
 </html>
