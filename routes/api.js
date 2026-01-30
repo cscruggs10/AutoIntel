@@ -90,13 +90,14 @@ router.post('/runlist/upload', upload.single('file'), async (req, res) => {
         INSERT INTO runlist_vehicles (
           runlist_id, vin, year, make, model, style, mileage,
           lane, lot, run_number, stock_number, exterior_color,
-          has_condition_report, grade
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          interior_color, has_condition_report, grade, mmr_value
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
       `, [
         runlistId, vehicle.vin, vehicle.year, vehicle.make, vehicle.model,
         vehicle.style, vehicle.mileage, vehicle.lane, vehicle.lot,
         vehicle.run_number, vehicle.stock_number, vehicle.exterior_color,
-        vehicle.has_condition_report, vehicle.grade
+        vehicle.interior_color, vehicle.has_condition_report || false,
+        vehicle.grade, vehicle.mmr_value
       ]);
     }
     
@@ -134,7 +135,7 @@ router.get('/runlist/:id', async (req, res) => {
       SELECT 
         id, vin, year, make, model, style, mileage,
         lane, lot, run_number, stock_number, exterior_color,
-        has_condition_report, grade,
+        interior_color, has_condition_report, grade, mmr_value,
         matched, match_count, last_sold_date, needs_scraping
       FROM runlist_vehicles 
       WHERE runlist_id = $1 

@@ -125,12 +125,25 @@ curl https://autointel-production.up.railway.app/api/status
 
 ### Upload a Runlist
 
+**Manheim Example:**
 ```bash
 curl -X POST http://localhost:3000/api/runlist/upload \
-  -F "file=@your-runlist.csv" \
+  -F "file=@manheim-little-rock.csv" \
+  -F "auction_name=Manheim Little Rock" \
+  -F "auction_date=2026-02-05"
+```
+
+**Edge Pipeline Example:**
+```bash
+curl -X POST http://localhost:3000/api/runlist/upload \
+  -F "file=@americas-atlanta.csv" \
   -F "auction_name=Americas Auto Auction - Atlanta Cartersville, GA" \
   -F "auction_date=2026-02-05"
 ```
+
+**Supported Format Groups:**
+- **Manheim** (all locations) - Includes MMR values
+- **Edge Pipeline** (Americas Auto, United Auto, etc.)
 
 ### View Results
 

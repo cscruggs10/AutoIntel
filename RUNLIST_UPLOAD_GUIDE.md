@@ -108,20 +108,36 @@ curl http://localhost:3000/api/runlist/1
 
 ---
 
-## 🏭 **Supported Auction Formats**
+## 🏭 **Supported Auction Format Groups**
 
-### **Currently Configured:**
+### **Format Groups (not individual locations):**
 
-1. **Americas Auto Auction - Atlanta Cartersville, GA**
-   - Columns: VIN, Year, Make, Model, Mileage, Lane, Lot, Grade, etc.
+1. **Manheim** (All Manheim locations)
+   - Manheim Little Rock
+   - Manheim Dallas
+   - Manheim Chicago
+   - Manheim [any location]
+   - **Includes:** MMR values, Condition Report Grade, Interior/Exterior color
 
-### **Need Another Format?**
+2. **Edge Pipeline** (All Edge Pipeline auctions)
+   - Americas Auto Auction (Atlanta, etc.)
+   - United Auto Exchange
+   - Carolina Auto Auction
+   - Tri-Cities Auto Auction
+   - **Includes:** Grade, Lane/Lot, Run Number, Stock Number
 
-Send Corey:
-1. Sample CSV from the new auction house
-2. Auction name (exact)
+### **How It Works:**
 
-I'll add the column mapping in ~10 minutes.
+- Upload from **any Manheim location** → Auto-detects "Manheim" format
+- Upload from **any Edge Pipeline location** → Auto-detects "Edge Pipeline" format
+- No per-location setup needed!
+
+### **Need Another Format Group?**
+
+Send sample CSV from a new auction network:
+1. Sample CSV
+2. Auction network name
+3. I'll add the format group in ~15 minutes
 
 ---
 

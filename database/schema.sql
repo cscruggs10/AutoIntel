@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS runlist_vehicles (
   model VARCHAR(50),
   style VARCHAR(100),
   exterior_color VARCHAR(50),
+  interior_color VARCHAR(50),
   mileage INTEGER,
   lane VARCHAR(50),
   lot VARCHAR(50),
@@ -87,6 +88,7 @@ CREATE TABLE IF NOT EXISTS runlist_vehicles (
   stock_number VARCHAR(50),
   has_condition_report BOOLEAN DEFAULT FALSE,
   grade DECIMAL(3,1),
+  mmr_value DECIMAL(10,2),
   
   -- Matching results
   matched BOOLEAN DEFAULT FALSE,
