@@ -246,23 +246,21 @@ router.get('/runlist/:id', async (req, res) => {
     }
     
     const vehicles = await pool.query(`
-      SELECT 
-        id, vin, year, make, model, style, mileage,
-        lane, lot, run_number, stock_number, exterior_color,
-        interior_color, has_condition_report, grade, mmr_value,
-        matched, match_count, last_sold_date, needs_scraping
-      FROM runlist_vehicles 
-      WHERE runlist_id = $1 
-      ORDER BY 
+      SELECT
+        id, vin, year, make, model, lane, lot,
+        matched, match_count, scraped
+      FROM runlist_vehicles
+      WHERE runlist_id = $1
+      ORDER BY
         matched DESC,
         match_count DESC,
         lane, lot
     `, [runlistId]);
-    
+
     // Group by match strength
     const matched = vehicles.rows.filter(v => v.matched);
     const unmatched = vehicles.rows.filter(v => !v.matched);
-    
+
     res.json({
       runlist: runlist.rows[0],
       vehicles: vehicles.rows,
@@ -270,7 +268,7 @@ router.get('/runlist/:id', async (req, res) => {
         total: vehicles.rows.length,
         matched: matched.length,
         unmatched: unmatched.length,
-        needs_scraping: vehicles.rows.filter(v => v.needs_scraping).length
+        needs_scraping: vehicles.rows.filter(v => v.matched && !v.scraped).length
       },
       summary: {
         matched: matched.slice(0, 10), // Top 10 matches
@@ -317,7 +315,7 @@ router.post('/runlist/:id/scrape', async (req, res) => {
     const vehiclesResult = await pool.query(`
       SELECT id, vin, year, make, model
       FROM runlist_vehicles
-      WHERE runlist_id = $1 AND needs_scraping = true
+      WHERE runlist_id = $1 AND matched = true AND scraped = false
     `, [runlistId]);
 
     const vehicles = vehiclesResult.rows;
@@ -390,7 +388,7 @@ router.post('/runlist/:id/scrape', async (req, res) => {
 
         // Mark vehicles as scraped
         pool.query(
-          'UPDATE runlist_vehicles SET needs_scraping = false WHERE runlist_id = $1 AND needs_scraping = true',
+          'UPDATE runlist_vehicles SET scraped = true WHERE runlist_id = $1 AND matched = true',
           [runlistId]
         ).catch(console.error);
 
