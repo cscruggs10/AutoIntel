@@ -1,0 +1,1 @@
+Initial memory state: Empty.

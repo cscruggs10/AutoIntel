@@ -1,0 +1,22 @@
+# Environment & secrets
+.env
+*.local
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Logs & debug
+logs/
+*.log
+autoniq-error.png
+*.png
+*.jpg
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary
+*.tmp
+*.temp
