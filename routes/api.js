@@ -14,6 +14,44 @@ const pool = new Pool({
 
 const upload = multer({ dest: 'uploads/' });
 
+// Migrate database - create missing tables for scraper
+router.post('/migrate', async (req, res) => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vehicles (
+        id SERIAL PRIMARY KEY,
+        vin VARCHAR(17) NOT NULL,
+        auction_name VARCHAR(255) NOT NULL,
+        cr_score DECIMAL(3,1),
+        raw_announcements TEXT,
+        scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(vin, auction_name)
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS announcements (
+        id SERIAL PRIMARY KEY,
+        announcement_text TEXT NOT NULL UNIQUE,
+        auction_name VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS vehicle_announcements (
+        vin VARCHAR(17) NOT NULL,
+        announcement_id INTEGER REFERENCES announcements(id),
+        PRIMARY KEY(vin, announcement_id)
+      )
+    `);
+
+    res.json({ success: true, message: 'Migration complete - tables created' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // API Status
 router.get('/status', async (req, res) => {
   try {
