@@ -1,20 +1,18 @@
 #!/usr/bin/env node
 /**
  * AutoNiq Announcement Scraper
- * 
- * Uses Clawdbot browser relay to extract announcement data from AutoNiq
+ *
+ * Uses Playwright to extract announcement data from AutoNiq
  * for VINs in a runlist CSV.
  */
 
 import { loadRunlist, storeVehicle, pool } from './scraper.js';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { chromium } from 'playwright';
 
-const execAsync = promisify(exec);
-
+const AUTONIQ_LOGIN_URL = 'https://autoniq.com/login';
 const AUTONIQ_BASE = 'https://autoniq.com/app/';
-const DELAY_MIN_MS = 3000;  // 3 seconds
-const DELAY_MAX_MS = 8000;  // 8 seconds
+const DELAY_MIN_MS = 2000;
+const DELAY_MAX_MS = 5000;
 
 // Random delay to avoid detection
 function randomDelay() {
@@ -22,57 +20,74 @@ function randomDelay() {
   return new Promise(resolve => setTimeout(resolve, delay));
 }
 
-// Call Clawdbot browser tool via exec (since we're running as a script)
-async function browserCommand(action, params = {}) {
-  const cmd = `clawdbot browser ${action} --profile=chrome ${Object.entries(params).map(([k,v]) => `--${k}="${v}"`).join(' ')}`;
-  const { stdout, stderr } = await execAsync(cmd);
-  if (stderr && !stderr.includes('Warning')) {
-    console.error('Browser error:', stderr);
+// Login to AutoNiq
+async function login(page) {
+  const username = process.env.AUTONIQ_USERNAME;
+  const password = process.env.AUTONIQ_PASSWORD;
+
+  if (!username || !password) {
+    throw new Error('AUTONIQ_USERNAME and AUTONIQ_PASSWORD environment variables required');
   }
-  return JSON.parse(stdout);
-}
 
-// Navigate to VIN in AutoNiq
-async function lookupVIN(targetId, vin) {
-  console.log(`Looking up VIN: ${vin}`);
-  
-  // Direct URL navigation - AutoNiq supports direct VIN URLs
-  const url = `https://autoniq.com/app/evaluator/vin/${vin}`;
-  await browserCommand('navigate', { targetId, targetUrl: url });
-  
+  console.log('Logging in to AutoNiq...');
+  await page.goto(AUTONIQ_LOGIN_URL, { waitUntil: 'networkidle' });
+
+  // Fill login form - adjust selectors based on actual AutoNiq login page
+  await page.fill('input[name="email"], input[type="email"], #email', username);
+  await page.fill('input[name="password"], input[type="password"], #password', password);
+
+  // Click login button
+  await page.click('button[type="submit"], input[type="submit"], .login-button, #login-btn');
+
+  // Wait for navigation to complete
+  await page.waitForURL('**/app/**', { timeout: 30000 });
+
+  console.log('Login successful!');
   await randomDelay();
-  
-  return targetId;
 }
 
-// Extract announcement data from AutoNiq page
-async function extractAnnouncements(targetId) {
-  // Take snapshot of current page
-  const snapshot = await browserCommand('snapshot', { targetId });
-  
-  // Convert snapshot to text for parsing
-  const snapshotText = JSON.stringify(snapshot);
-  
-  // Pattern: "9:0547, Grade: 1.8 AS IS; INOP"
-  const gradePattern = /Grade:\s*([\d.]+)\s+([^"\\]+)/;
-  const match = snapshotText.match(gradePattern);
-  
+// Navigate to VIN in AutoNiq and extract data
+async function scrapeVIN(page, vin) {
+  const url = `https://autoniq.com/app/evaluator/vin/${vin}`;
+
+  await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+  await randomDelay();
+
+  // Get page content for parsing
+  const content = await page.content();
+
+  // Extract grade and announcements
+  // Pattern: "Grade: 1.8 AS IS; INOP" or similar
+  const gradePattern = /Grade:\s*([\d.]+)\s+([^<]+)/i;
+  const match = content.match(gradePattern);
+
   if (!match) {
+    // Try alternative patterns
+    const altPattern = /CR\s*(?:Score|Grade):\s*([\d.]+)/i;
+    const altMatch = content.match(altPattern);
+
+    if (altMatch) {
+      return {
+        grade: parseFloat(altMatch[1]),
+        announcements: []
+      };
+    }
+
     return {
       grade: null,
       announcements: []
     };
   }
-  
+
   const grade = parseFloat(match[1]);
   const announcementText = match[2].trim();
-  
-  // Split by semicolon
+
+  // Split by semicolon or common delimiters
   const announcements = announcementText
-    .split(';')
+    .split(/[;|]/)
     .map(a => a.trim())
-    .filter(Boolean);
-  
+    .filter(a => a && a.length > 1);
+
   return {
     grade,
     announcements
@@ -84,89 +99,92 @@ async function scrapeRunlist(csvPath, auctionName) {
   console.log(`\n=== AutoNiq Announcement Scraper ===`);
   console.log(`Runlist: ${csvPath}`);
   console.log(`Auction: ${auctionName}\n`);
-  
+
   // Load runlist
   const vehicles = loadRunlist(csvPath);
-  console.log(`Loaded ${vehicles.length} vehicles from runlist`);
-  
-  // Get browser status
-  const status = await browserCommand('status');
-  if (!status.running) {
-    console.error('Browser relay not connected. Please attach a Chrome tab.');
-    process.exit(1);
-  }
-  
-  // Get active tab
-  const tabs = await browserCommand('tabs');
-  if (!tabs.tabs || tabs.tabs.length === 0) {
-    console.error('No browser tab attached. Please click the Browser Relay icon in Chrome.');
-    process.exit(1);
-  }
-  
-  const targetId = tabs.tabs[0].targetId;
-  console.log(`Using browser tab: ${tabs.tabs[0].title}\n`);
-  
-  // Navigate to AutoNiq
-  console.log('Navigating to AutoNiq...');
-  await browserCommand('navigate', { targetId, targetUrl: AUTONIQ_BASE });
-  await randomDelay();
-  
-  // Process each VIN
-  let processed = 0;
-  let errors = 0;
-  
-  for (const vehicle of vehicles) {
-    const vin = vehicle.Vin || vehicle.VIN;
-    if (!vin) {
-      console.log('Skipping vehicle with no VIN');
-      continue;
-    }
-    
-    try {
-      // Check if already scraped
-      const existing = await pool.query(
-        'SELECT 1 FROM vehicles WHERE vin = $1 AND auction_name = $2',
-        [vin, auctionName]
-      );
-      
-      if (existing.rows.length > 0) {
-        console.log(`✓ ${vin} - already scraped`);
+  console.log(`Loaded ${vehicles.length} vehicles from runlist\n`);
+
+  // Launch browser
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  });
+
+  const page = await context.newPage();
+
+  try {
+    // Login first
+    await login(page);
+
+    // Process each VIN
+    let processed = 0;
+    let errors = 0;
+
+    for (const vehicle of vehicles) {
+      const vin = vehicle.Vin || vehicle.VIN || vehicle.vin;
+      if (!vin) {
+        console.log('Skipping vehicle with no VIN');
         continue;
       }
-      
-      // Navigate to VIN
-      await lookupVIN(targetId, vin);
-      
-      // Extract announcement data
-      const data = await extractAnnouncements(targetId);
-      
-      // Store in database
-      const rawAnnouncements = data.announcements.join('|');
-      await storeVehicle(vin, auctionName, data.grade, rawAnnouncements);
-      
-      processed++;
-      console.log(`✓ ${vin} - ${data.announcements.length} announcements found`);
-      
-    } catch (error) {
-      errors++;
-      console.error(`✗ ${vin} - Error: ${error.message}`);
+
+      try {
+        // Check if already scraped
+        const existing = await pool.query(
+          'SELECT 1 FROM vehicles WHERE vin = $1 AND auction_name = $2',
+          [vin, auctionName]
+        );
+
+        if (existing.rows.length > 0) {
+          console.log(`✓ ${vin} - already scraped`);
+          continue;
+        }
+
+        // Scrape VIN
+        const data = await scrapeVIN(page, vin);
+
+        // Store in database
+        const rawAnnouncements = data.announcements.join('|');
+        await storeVehicle(vin, auctionName, data.grade, rawAnnouncements);
+
+        processed++;
+        console.log(`✓ ${vin} - Grade: ${data.grade || 'N/A'}, ${data.announcements.length} announcements found`);
+
+      } catch (error) {
+        errors++;
+        console.error(`✗ ${vin} - Error: ${error.message}`);
+
+        // If we get logged out, try to re-login
+        if (error.message.includes('login') || error.message.includes('unauthorized')) {
+          console.log('Session expired, re-logging in...');
+          await login(page);
+        }
+      }
+
+      // Rate limiting
+      await randomDelay();
     }
-    
-    // Rate limiting
-    await randomDelay();
+
+    console.log(`\n=== Scraping Complete ===`);
+    console.log(`Processed: ${processed}`);
+    console.log(`Errors: ${errors}`);
+    console.log(`Total: ${vehicles.length}`);
+
+  } finally {
+    await browser.close();
+    await pool.end();
   }
-  
-  console.log(`\n=== Scraping Complete ===`);
-  console.log(`Processed: ${processed}`);
-  console.log(`Errors: ${errors}`);
-  console.log(`Total: ${vehicles.length}`);
 }
 
 // CLI
 const args = process.argv.slice(2);
 if (args.length < 2) {
   console.log('Usage: node autoniq-scraper.js <runlist.csv> <auction-name>');
-  console.log('Example: node autoniq-scraper.js test-runlist.csv "United Auto Exchange Memphis"');
+  console.log('Example: node autoniq-scraper.js matched.csv "Manheim Little Rock"');
+  console.log('\nRequired env vars: AUTONIQ_USERNAME, AUTONIQ_PASSWORD, DATABASE_URL');
   process.exit(1);
 }
 

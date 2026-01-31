@@ -2,16 +2,14 @@
 import pg from 'pg';
 import { parse } from 'csv-parse/sync';
 import fs from 'fs';
+import 'dotenv/config';
 
 const { Pool } = pg;
 
-// Database connection
+// Database connection - use DATABASE_URL from environment
 const pool = new Pool({
-  user: 'auction_user',
-  password: 'auction_pass',
-  host: 'localhost',
-  database: 'auction_data',
-  port: 5432,
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 // Check if VIN already scraped
