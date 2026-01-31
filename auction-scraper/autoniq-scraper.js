@@ -20,7 +20,7 @@ function randomDelay() {
   return new Promise(resolve => setTimeout(resolve, delay));
 }
 
-// Login to AutoNiq via Okta SSO
+// Login to AutoNiq via Okta SSO (two-step flow)
 async function login(page) {
   const username = process.env.AUTONIQ_USERNAME;
   const password = process.env.AUTONIQ_PASSWORD;
@@ -34,40 +34,41 @@ async function login(page) {
   await page.goto(AUTONIQ_LOGIN_URL, { waitUntil: 'networkidle', timeout: 30000 });
   console.log('  -> Current URL:', page.url());
 
-  // Step 2: Click "Sign In" button to go to Okta
-  console.log('  -> Step 2: Looking for Sign In button...');
-  await page.waitForSelector('text=Sign In, text=Sign in, text=LOGIN, text=Log In, a:has-text("Sign"), button:has-text("Sign")', { timeout: 10000 });
-  await page.click('text=Sign In, text=Sign in, text=LOGIN, text=Log In, a:has-text("Sign"), button:has-text("Sign")');
-  console.log('  -> Clicked Sign In, waiting for Okta redirect...');
+  // Step 2: Handle cookie consent if present
+  console.log('  -> Step 2: Checking for cookie consent...');
+  const acceptButton = page.locator('button:has-text("Accept")');
+  if (await acceptButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await acceptButton.click();
+    console.log('  -> Accepted cookies');
+  }
 
-  // Step 3: Wait for Okta page and enter username
-  console.log('  -> Step 3: Waiting for Okta username page...');
-  await page.waitForURL('**/okta**', { timeout: 30000 });
-  console.log('  -> On Okta page:', page.url());
+  // Step 3: Click "Sign In" button
+  console.log('  -> Step 3: Clicking Sign In button...');
+  await page.getByRole('button', { name: 'Sign In' }).click();
 
-  // Wait for username input
-  await page.waitForSelector('input[name="identifier"], input[name="username"], input[type="email"], #okta-signin-username', { timeout: 15000 });
-  console.log('  -> Found username field, entering username...');
-  await page.fill('input[name="identifier"], input[name="username"], input[type="email"], #okta-signin-username', username);
+  // Step 4: Wait for Okta username page and enter username
+  console.log('  -> Step 4: Waiting for Okta Welcome page...');
+  await page.waitForSelector('h2:has-text("Welcome!")', { timeout: 15000 });
+  console.log('  -> On Okta page, entering username...');
+  await page.getByRole('textbox', { name: 'Username' }).fill(username);
 
-  // Click Next/Continue button
-  console.log('  -> Clicking Next button...');
-  await page.click('input[type="submit"], button[type="submit"], text=Next, text=Continue, text=Submit');
-  await randomDelay();
+  // Step 5: Click "Next" button
+  console.log('  -> Step 5: Clicking Next button...');
+  await page.getByRole('button', { name: 'Next' }).click();
 
-  // Step 4: Wait for password page and enter password
-  console.log('  -> Step 4: Waiting for password field...');
-  await page.waitForSelector('input[name="credentials.passcode"], input[name="password"], input[type="password"], #okta-signin-password', { timeout: 15000 });
-  console.log('  -> Found password field, entering password...');
-  await page.fill('input[name="credentials.passcode"], input[name="password"], input[type="password"], #okta-signin-password', password);
+  // Step 6: Wait for password page and enter password
+  console.log('  -> Step 6: Waiting for password page...');
+  await page.waitForSelector('h3:has-text("Please sign in to continue.")', { timeout: 15000 });
+  console.log('  -> Entering password...');
+  await page.getByRole('textbox', { name: 'Password' }).fill(password);
 
-  // Click Sign In/Submit
-  console.log('  -> Clicking Sign In button...');
-  await page.click('input[type="submit"], button[type="submit"], text=Sign in, text=Sign In, text=Verify');
+  // Step 7: Click "Sign in" button
+  console.log('  -> Step 7: Clicking Sign in button...');
+  await page.getByRole('button', { name: 'Sign in' }).click();
 
-  // Step 5: Wait for redirect back to AutoNiq
-  console.log('  -> Step 5: Waiting for redirect back to AutoNiq...');
-  await page.waitForURL('**/autoniq.com/app/**', { timeout: 60000 });
+  // Step 8: Wait for dashboard
+  console.log('  -> Step 8: Waiting for dashboard...');
+  await page.waitForSelector('h1:has-text("Recently Evaluated")', { timeout: 30000 });
 
   console.log('  -> Login successful! Current URL:', page.url());
   await randomDelay();
