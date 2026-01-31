@@ -81,44 +81,56 @@ async function scrapeVIN(page, vin) {
   await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
   await randomDelay();
 
-  // Get page content for parsing
-  const content = await page.content();
+  // Try to find the auction info banner (light blue section with grade and announcements)
+  // Format: "1:22, Grade: 3.9 | AS IS" or "Lane:Run, Grade: X.X | ANNOUNCEMENT1; ANNOUNCEMENT2"
 
-  // Extract grade and announcements
-  // Pattern: "Grade: 1.8 AS IS; INOP" or similar
-  const gradePattern = /Grade:\s*([\d.]+)\s+([^<]+)/i;
-  const match = content.match(gradePattern);
+  let grade = null;
+  let announcements = [];
+  let laneRun = null;
 
-  if (!match) {
-    // Try alternative patterns
-    const altPattern = /CR\s*(?:Score|Grade):\s*([\d.]+)/i;
-    const altMatch = content.match(altPattern);
+  try {
+    // Look for text containing "Grade:" pattern anywhere on page
+    const pageText = await page.textContent('body');
 
-    if (altMatch) {
-      return {
-        grade: parseFloat(altMatch[1]),
-        announcements: []
-      };
+    // Pattern: captures lane:run, grade, and everything after the pipe as announcements
+    // Example: "1:22, Grade: 3.9 | AS IS" or "1:22, Grade: 3.9 | AS IS; STRUCTURAL DAMAGE"
+    const fullPattern = /(\d+:\d+),?\s*Grade:\s*([\d.]+)\s*\|\s*(.+?)(?=\n|$|\d+:\d+,)/gi;
+    const matches = [...pageText.matchAll(fullPattern)];
+
+    if (matches.length > 0) {
+      // Take the first match (most recent/relevant)
+      const match = matches[0];
+      laneRun = match[1];
+      grade = parseFloat(match[2]);
+      const announcementText = match[3].trim();
+
+      // Split announcements by semicolon, pipe, or common delimiters
+      announcements = announcementText
+        .split(/[;|]/)
+        .map(a => a.trim())
+        .filter(a => a && a.length > 1 && !a.match(/^\d+:\d+$/)); // Filter out lane:run patterns
+    } else {
+      // Fallback: simpler pattern just for grade and announcements
+      const simplePattern = /Grade:\s*([\d.]+)\s*\|?\s*(.+?)(?=\n|$|Grade:)/i;
+      const simpleMatch = pageText.match(simplePattern);
+
+      if (simpleMatch) {
+        grade = parseFloat(simpleMatch[1]);
+        const announcementText = simpleMatch[2].trim();
+        announcements = announcementText
+          .split(/[;|]/)
+          .map(a => a.trim())
+          .filter(a => a && a.length > 1);
+      }
     }
-
-    return {
-      grade: null,
-      announcements: []
-    };
+  } catch (err) {
+    console.log(`  Warning: Could not extract data for ${vin}: ${err.message}`);
   }
-
-  const grade = parseFloat(match[1]);
-  const announcementText = match[2].trim();
-
-  // Split by semicolon or common delimiters
-  const announcements = announcementText
-    .split(/[;|]/)
-    .map(a => a.trim())
-    .filter(a => a && a.length > 1);
 
   return {
     grade,
-    announcements
+    announcements,
+    laneRun
   };
 }
 
