@@ -11,8 +11,8 @@ import { chromium } from 'playwright';
 
 const AUTONIQ_LOGIN_URL = 'https://autoniq.com/app/login?redirect=/app/';
 const AUTONIQ_BASE = 'https://autoniq.com/app/';
-const DELAY_MIN_MS = 2000;
-const DELAY_MAX_MS = 5000;
+const DELAY_MIN_MS = 500;
+const DELAY_MAX_MS = 1500;
 
 // Random delay to avoid detection
 function randomDelay() {

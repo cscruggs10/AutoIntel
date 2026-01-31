@@ -355,8 +355,8 @@ router.get('/runlist/:id/enriched', async (req, res) => {
       LEFT JOIN vehicles v ON rv.vin = v.vin
       WHERE rv.runlist_id = $1
       ORDER BY
-        v.cr_score ASC NULLS LAST,
-        rv.lane, rv.lot
+        rv.lane ASC NULLS LAST,
+        rv.lot ASC NULLS LAST
     `, [runlistId]);
 
     // Flag risky vehicles
