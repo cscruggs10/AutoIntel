@@ -67,7 +67,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/upload', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'upload.html'));
 });
 
 app.get('/autointel', (req, res) => {
