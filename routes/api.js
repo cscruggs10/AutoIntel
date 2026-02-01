@@ -29,6 +29,20 @@ router.get('/vehicles', async (req, res) => {
   }
 });
 
+// Clear all runlist data (for fresh start)
+router.post('/clear-runlists', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM bid_list');
+    await pool.query('DELETE FROM runlist_vehicles');
+    await pool.query('DELETE FROM runlists');
+    await pool.query('DELETE FROM vehicles');
+
+    res.json({ success: true, message: 'All runlist data cleared' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Migrate database - create missing tables for scraper
 router.post('/migrate', async (req, res) => {
   try {
