@@ -90,7 +90,7 @@ router.get('/runlist/:runlist_id', async (req, res) => {
     const user_id = getUserId(req);
 
     const result = await pool.query(`
-      SELECT 
+      SELECT
         bl.id,
         bl.vehicle_id,
         bl.bid_type,
@@ -102,21 +102,19 @@ router.get('/runlist/:runlist_id', async (req, res) => {
       WHERE bl.auction_id = $1 AND bl.user_id = $2
     `, [runlist_id, user_id]);
 
-    // Create a map of vehicle_id -> bid info
-    const bidMap = {};
-    result.rows.forEach(bid => {
-      bidMap[bid.vehicle_id] = {
-        bid_id: bid.id,
-        bid_type: bid.bid_type,
-        max_bid: bid.max_bid,
-        created_by: bid.created_by_name,
-        created_at: bid.created_at
-      };
-    });
+    // Return array of bids (calendar expects this format)
+    const bids = result.rows.map(bid => ({
+      id: bid.id,
+      vehicle_id: bid.vehicle_id,
+      bid_type: bid.bid_type,
+      max_bid: bid.max_bid,
+      created_by: bid.created_by_name,
+      created_at: bid.created_at
+    }));
 
     res.json({
       runlist_id,
-      bids: bidMap
+      bids
     });
   } catch (err) {
     console.error('Get runlist bids error:', err);
@@ -130,7 +128,7 @@ router.get('/in-lane-dashboard', async (req, res) => {
     const user_id = getUserId(req);
 
     const result = await pool.query(`
-      SELECT 
+      SELECT
         r.id as auction_id,
         r.name as auction_name,
         r.auction_name as auction_house,
@@ -140,12 +138,10 @@ router.get('/in-lane-dashboard', async (req, res) => {
         rv.year,
         rv.make,
         rv.model,
-        rv.style as trim,
-        rv.mileage as miles,
         rv.lane,
-        rv.run_number,
-        rv.grade as cr,
-        ad.announcements,
+        rv.lot,
+        v.cr_score as grade,
+        v.raw_announcements as announcements,
         bl.id as bid_id,
         bl.created_at as added_at,
         u.name as added_by
@@ -153,9 +149,9 @@ router.get('/in-lane-dashboard', async (req, res) => {
       JOIN runlist_vehicles rv ON bl.vehicle_id = rv.id
       JOIN runlists r ON bl.auction_id = r.id
       JOIN users u ON bl.created_by = u.id
-      LEFT JOIN autoniq_data ad ON rv.id = ad.runlist_vehicle_id
+      LEFT JOIN vehicles v ON rv.vin = v.vin
       WHERE bl.user_id = $1 AND bl.bid_type = 'in-lane'
-      ORDER BY r.auction_date, r.auction_name, rv.lane, rv.run_number
+      ORDER BY r.auction_date, r.auction_name, rv.lane, rv.lot
     `, [user_id]);
 
     // Group by auction
@@ -178,12 +174,10 @@ router.get('/in-lane-dashboard', async (req, res) => {
         year: row.year,
         make: row.make,
         model: row.model,
-        trim: row.trim || 'N/A',
-        miles: row.miles || 'N/A',
-        lane: row.lane || 'N/A',
-        run_number: row.run_number || 'N/A',
-        cr: row.cr || 'N/A',
-        announcements: row.announcements || [],
+        lane: row.lane || '-',
+        lot: row.lot || '-',
+        grade: row.grade || null,
+        announcements: row.announcements || '',
         added_by: row.added_by,
         added_at: row.added_at
       });
@@ -205,7 +199,7 @@ router.get('/proxy-dashboard', async (req, res) => {
     const user_id = getUserId(req);
 
     const result = await pool.query(`
-      SELECT 
+      SELECT
         r.id as auction_id,
         r.name as auction_name,
         r.auction_name as auction_house,
@@ -215,12 +209,10 @@ router.get('/proxy-dashboard', async (req, res) => {
         rv.year,
         rv.make,
         rv.model,
-        rv.style as trim,
-        rv.mileage as miles,
         rv.lane,
-        rv.run_number,
-        rv.grade as cr,
-        ad.announcements,
+        rv.lot,
+        v.cr_score as grade,
+        v.raw_announcements as announcements,
         bl.id as bid_id,
         bl.max_bid,
         bl.created_at as added_at,
@@ -229,9 +221,9 @@ router.get('/proxy-dashboard', async (req, res) => {
       JOIN runlist_vehicles rv ON bl.vehicle_id = rv.id
       JOIN runlists r ON bl.auction_id = r.id
       JOIN users u ON bl.created_by = u.id
-      LEFT JOIN autoniq_data ad ON rv.id = ad.runlist_vehicle_id
+      LEFT JOIN vehicles v ON rv.vin = v.vin
       WHERE bl.user_id = $1 AND bl.bid_type = 'proxy'
-      ORDER BY r.auction_date, r.auction_name, rv.lane, rv.run_number
+      ORDER BY r.auction_date, r.auction_name, rv.lane, rv.lot
     `, [user_id]);
 
     // Group by auction
@@ -254,12 +246,10 @@ router.get('/proxy-dashboard', async (req, res) => {
         year: row.year,
         make: row.make,
         model: row.model,
-        trim: row.trim || 'N/A',
-        miles: row.miles || 'N/A',
-        lane: row.lane || 'N/A',
-        run_number: row.run_number || 'N/A',
-        cr: row.cr || 'N/A',
-        announcements: row.announcements || [],
+        lane: row.lane || '-',
+        lot: row.lot || '-',
+        grade: row.grade || null,
+        announcements: row.announcements || '',
         max_bid: row.max_bid,
         added_by: row.added_by,
         added_at: row.added_at
