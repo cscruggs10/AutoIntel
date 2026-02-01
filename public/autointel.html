@@ -358,17 +358,21 @@
 
     navLinks.forEach(link => {
       link.addEventListener('click', (e) => {
-        e.preventDefault();
         const pageId = link.dataset.page;
-        
+
+        // If no data-page, let the link navigate normally
+        if (!pageId) return;
+
+        e.preventDefault();
+
         // Update active nav link
         navLinks.forEach(l => l.classList.remove('active'));
         link.classList.add('active');
-        
+
         // Show selected page
         pages.forEach(p => p.classList.remove('active'));
         document.getElementById(`${pageId}-page`).classList.add('active');
-        
+
         // Load page content
         loadPage(pageId);
       });
