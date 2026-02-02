@@ -708,13 +708,13 @@
           return a.localeCompare(b);
         });
 
-        // Render table header dynamically
+        // Render table header dynamically - Grade, Announcements, Action first
         let headerHtml = '<tr>';
+        headerHtml += '<th>Grade</th><th>Announcements</th><th>Action</th>';
         for (const col of sortedCsvColumns) {
           headerHtml += `<th>${col}</th>`;
         }
-        // Add enriched columns at the end
-        headerHtml += '<th>Grade</th><th>Announcements</th><th>Action</th></tr>';
+        headerHtml += '</tr>';
         document.getElementById('tableHeader').innerHTML = headerHtml;
 
         // Render table body
@@ -733,6 +733,18 @@
 
           bodyHtml += `<tr class="${isFlagged ? 'flagged' : ''} ${!isMatched ? 'hidden' : ''}" id="row-${v.id}" data-matched="${isMatched}" data-enriched="${isEnriched}" data-flagged="${isFlagged}">`;
 
+          // Add Grade, Announcements, Action columns FIRST
+          bodyHtml += `
+            <td>${v.grade ? `<span class="grade-badge ${gradeClass}">${v.grade}</span>` : '-'}</td>
+            <td class="announcements-cell" title="${announcements}">${announcements || '-'}</td>
+            <td>
+              <div class="bid-actions">
+                <button class="bid-btn in-lane ${bidType === 'in-lane' ? 'active' : ''}" onclick="setBid(${v.id}, 'in-lane')">In-Lane</button>
+                <button class="bid-btn proxy ${bidType === 'proxy' ? 'active' : ''}" onclick="setBid(${v.id}, 'proxy')">Proxy</button>
+                <button class="bid-btn pass ${bidType === 'pass' ? 'active' : ''}" onclick="setBid(${v.id}, 'pass')">Pass</button>
+              </div>
+            </td>`;
+
           // Add CSV columns dynamically
           for (const col of sortedCsvColumns) {
             let cellValue = rawData[col] || '-';
@@ -750,18 +762,7 @@
             bodyHtml += `<td class="${cellClass}">${cellValue}</td>`;
           }
 
-          // Add enriched columns
-          bodyHtml += `
-            <td>${v.grade ? `<span class="grade-badge ${gradeClass}">${v.grade}</span>` : '-'}</td>
-            <td class="announcements-cell" title="${announcements}">${announcements || '-'}</td>
-            <td>
-              <div class="bid-actions">
-                <button class="bid-btn in-lane ${bidType === 'in-lane' ? 'active' : ''}" onclick="setBid(${v.id}, 'in-lane')">In-Lane</button>
-                <button class="bid-btn proxy ${bidType === 'proxy' ? 'active' : ''}" onclick="setBid(${v.id}, 'proxy')">Proxy</button>
-                <button class="bid-btn pass ${bidType === 'pass' ? 'active' : ''}" onclick="setBid(${v.id}, 'pass')">Pass</button>
-              </div>
-            </td>
-          </tr>`;
+          bodyHtml += '</tr>';
         }
 
         document.getElementById('tableBody').innerHTML = bodyHtml;
