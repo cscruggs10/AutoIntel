@@ -606,7 +606,7 @@
         const isToday = day.date === today;
         const auctionsHtml = day.auctions.length > 0
           ? day.auctions.map(a => {
-              const isEnriched = a.enrichedCount > 0 && a.enrichedCount >= a.matchedCount;
+              const isEnriched = a.status === 'scraped' || (a.enrichedCount > 0 && a.enrichedCount >= a.matchedCount);
               const canEnrich = a.matchedCount > 0 && !isEnriched;
               const isQueued = queuedRunlists.has(a.id);
               return `
