@@ -74,12 +74,28 @@ async function login(page) {
   await randomDelay();
 }
 
+// Check if we're logged out (redirected to login page)
+async function isLoggedOut(page) {
+  const currentUrl = page.url();
+  if (currentUrl.includes('/login') || currentUrl.includes('/signin')) {
+    return true;
+  }
+  // Check for login button on page (indicates logged out)
+  const loginButton = await page.locator('button:has-text("Sign In")').count();
+  return loginButton > 0;
+}
+
 // Navigate to VIN in AutoNiq and extract data
 async function scrapeVIN(page, vin) {
   const url = `https://autoniq.com/app/evaluator/vin/${vin}`;
 
   await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
   await randomDelay();
+
+  // Check if we got logged out
+  if (await isLoggedOut(page)) {
+    throw new Error('SESSION_EXPIRED');
+  }
 
   let grade = null;
   let announcements = [];
@@ -296,13 +312,31 @@ async function scrapeRunlist(csvPath, auctionName) {
         console.log(`✓ ${vin} - Grade: ${data.grade || 'N/A'} | ${announcementPreview}`);
 
       } catch (error) {
-        errors++;
-        console.error(`✗ ${vin} - Error: ${error.message}`);
+        // If session expired, re-login and retry this VIN
+        if (error.message === 'SESSION_EXPIRED' || error.message.includes('login') || error.message.includes('unauthorized')) {
+          console.log(`⚠ Session expired, re-logging in...`);
+          try {
+            await login(page);
+            console.log(`⚠ Re-login successful, retrying ${vin}...`);
 
-        // If we get logged out, try to re-login
-        if (error.message.includes('login') || error.message.includes('unauthorized')) {
-          console.log('Session expired, re-logging in...');
-          await login(page);
+            // Retry this VIN after re-login
+            const retryData = await scrapeVIN(page, vin);
+            const retryAnnouncements = retryData.announcements.join('|');
+            await storeVehicle(vin, auctionName, retryData.grade, retryAnnouncements);
+
+            processed++;
+            const announcementPreview = retryData.announcements.length > 0
+              ? retryData.announcements.join('; ').substring(0, 50)
+              : 'none';
+            console.log(`✓ ${vin} - Grade: ${retryData.grade || 'N/A'} | ${announcementPreview}`);
+            continue; // Skip to next VIN
+          } catch (retryError) {
+            console.error(`✗ ${vin} - Retry failed: ${retryError.message}`);
+            errors++;
+          }
+        } else {
+          errors++;
+          console.error(`✗ ${vin} - Error: ${error.message}`);
         }
       }
 
