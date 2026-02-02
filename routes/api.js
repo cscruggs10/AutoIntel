@@ -500,6 +500,49 @@ router.get('/runlists', async (req, res) => {
   }
 });
 
+// Debug endpoint - compare data formats between historical_sales and runlist_vehicles
+router.get('/debug/data-formats', async (req, res) => {
+  try {
+    // Get sample from historical_sales
+    const historicalSample = await pool.query(`
+      SELECT DISTINCT make, model, year
+      FROM historical_sales
+      ORDER BY make, model
+      LIMIT 20
+    `);
+
+    // Get sample from runlist_vehicles
+    const runlistSample = await pool.query(`
+      SELECT DISTINCT make, model, year
+      FROM runlist_vehicles
+      ORDER BY make, model
+      LIMIT 20
+    `);
+
+    // Get unique makes from both tables
+    const historicalMakes = await pool.query(`
+      SELECT DISTINCT make FROM historical_sales ORDER BY make
+    `);
+
+    const runlistMakes = await pool.query(`
+      SELECT DISTINCT make FROM runlist_vehicles ORDER BY make
+    `);
+
+    res.json({
+      historical_sales: {
+        sample: historicalSample.rows,
+        unique_makes: historicalMakes.rows.map(r => r.make)
+      },
+      runlist_vehicles: {
+        sample: runlistSample.rows,
+        unique_makes: runlistMakes.rows.map(r => r.make)
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Calendar API - Get runlists for next 7 days
 router.get('/calendar/week', async (req, res) => {
   try {
