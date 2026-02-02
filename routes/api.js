@@ -408,7 +408,7 @@ router.get('/runlist/:id/enriched', async (req, res) => {
     // Join runlist vehicles with scraped data
     const vehicles = await pool.query(`
       SELECT
-        rv.id, rv.vin, rv.year, rv.make, rv.model, rv.lane, rv.lot,
+        rv.id, rv.vin, rv.year, rv.make, rv.model, rv.mileage, rv.lane, rv.lot,
         rv.matched, rv.match_count,
         v.cr_score as grade,
         v.raw_announcements as announcements,

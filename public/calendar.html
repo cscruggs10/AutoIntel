@@ -155,63 +155,106 @@
       color: #9ca3af;
       font-size: 0.85rem;
     }
-    .modal-overlay {
+    /* Full screen vehicle view */
+    .fullscreen-view {
       display: none;
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0,0,0,0.5);
+      background: #f3f4f6;
       z-index: 100;
+      overflow: hidden;
+    }
+    .fullscreen-view.active { display: flex; flex-direction: column; }
+    .fullscreen-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 1rem 2rem;
+      color: white;
+      display: flex;
+      justify-content: space-between;
       align-items: center;
-      justify-content: center;
+      flex-shrink: 0;
     }
-    .modal-overlay.active { display: flex; }
-    .modal {
-      background: white;
-      padding: 1.5rem;
-      border-radius: 16px;
-      max-width: 800px;
-      width: 90%;
-      max-height: 80vh;
-      overflow-y: auto;
-    }
-    .modal h2 {
-      margin-bottom: 1rem;
-      color: #374151;
-    }
-    .modal-close {
-      float: right;
-      background: none;
+    .fullscreen-header h2 { margin: 0; font-size: 1.25rem; }
+    .fullscreen-close {
+      background: rgba(255,255,255,0.2);
       border: none;
-      font-size: 1.5rem;
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
       cursor: pointer;
-      color: #6b7280;
+      font-weight: 500;
     }
-    .vehicle-list {
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      max-height: 400px;
-      overflow-y: auto;
-    }
-    .vehicle-row {
-      display: grid;
-      grid-template-columns: 70px 1fr 60px 120px 180px;
-      padding: 0.5rem 0.75rem;
+    .fullscreen-close:hover { background: rgba(255,255,255,0.3); }
+    .fullscreen-stats {
+      background: white;
+      padding: 1rem 2rem;
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
       border-bottom: 1px solid #e5e7eb;
-      font-size: 0.85rem;
-      align-items: center;
-      gap: 0.5rem;
+      flex-shrink: 0;
     }
-    .vehicle-row:last-child { border-bottom: none; }
-    .vehicle-row.header {
+    .stat-box {
       background: #f9fafb;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+    .stat-box.green { background: #ecfdf5; }
+    .stat-box.red { background: #fef2f2; }
+    .stat-box.blue { background: #dbeafe; }
+    .stat-box.yellow { background: #fef3c7; }
+    .fullscreen-content {
+      flex: 1;
+      overflow: auto;
+      padding: 1rem;
+    }
+    .vehicle-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .vehicle-table th {
+      background: #374151;
+      color: white;
+      padding: 0.75rem 0.5rem;
+      text-align: left;
+      font-size: 0.8rem;
       font-weight: 600;
       position: sticky;
       top: 0;
+      z-index: 10;
     }
-    .vehicle-row.flagged { background: #fef2f2; }
+    .vehicle-table td {
+      padding: 0.5rem;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 0.85rem;
+      vertical-align: middle;
+    }
+    .vehicle-table tr:hover { background: #f9fafb; }
+    .vehicle-table tr.flagged { background: #fef2f2; }
+    .vehicle-table tr.flagged:hover { background: #fee2e2; }
+    .vin-cell { font-family: monospace; font-size: 0.75rem; }
+    .mileage-cell { text-align: right; }
+    .announcements-cell {
+      max-width: 300px;
+      font-size: 0.75rem;
+      line-height: 1.3;
+    }
+    .fullscreen-footer {
+      background: white;
+      padding: 1rem 2rem;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      gap: 1rem;
+      flex-shrink: 0;
+    }
     .grade-badge {
       display: inline-block;
       padding: 0.25rem 0.5rem;
@@ -293,13 +336,20 @@
     </div>
   </div>
 
-  <!-- Auction Detail Modal -->
-  <div class="modal-overlay" id="auctionModal">
-    <div class="modal">
-      <button class="modal-close" id="closeModal">&times;</button>
-      <h2 id="modalTitle">Auction Details</h2>
-      <div id="modalContent"></div>
+  <!-- Full Screen Vehicle View -->
+  <div class="fullscreen-view" id="vehicleView">
+    <div class="fullscreen-header">
+      <h2 id="viewTitle">Auction Details</h2>
+      <button class="fullscreen-close" id="closeView">Back to Calendar</button>
     </div>
+    <div class="fullscreen-stats" id="viewStats"></div>
+    <div class="fullscreen-content">
+      <table class="vehicle-table">
+        <thead id="tableHeader"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="fullscreen-footer" id="viewFooter"></div>
   </div>
 
   <script>
@@ -319,11 +369,8 @@
         loadWeek();
       });
 
-      // Modal close
-      document.getElementById('closeModal').addEventListener('click', closeModal);
-      document.getElementById('auctionModal').addEventListener('click', (e) => {
-        if (e.target === document.getElementById('auctionModal')) closeModal();
-      });
+      // View close
+      document.getElementById('closeView').addEventListener('click', closeView);
     });
 
     async function loadWeek() {
@@ -392,9 +439,9 @@
 
     async function openAuction(id, name) {
       currentAuctionId = id;
-      document.getElementById('modalTitle').textContent = name;
-      document.getElementById('auctionModal').classList.add('active');
-      document.getElementById('modalContent').innerHTML = '<p>Loading...</p>';
+      document.getElementById('viewTitle').textContent = name;
+      document.getElementById('vehicleView').classList.add('active');
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem;">Loading...</td></tr>';
 
       try {
         // Load vehicles and existing bids in parallel
@@ -414,70 +461,75 @@
           }
         }
 
-        const vehicles = data.vehicles;
-
-        let html = `
-          <div style="margin-bottom: 1rem; display: flex; gap: 1rem; flex-wrap: wrap;">
-            <div style="background: #f9fafb; padding: 0.5rem 1rem; border-radius: 8px;">
-              <strong>${data.stats.total}</strong> vehicles
-            </div>
-            <div style="background: #ecfdf5; padding: 0.5rem 1rem; border-radius: 8px;">
-              <strong>${data.stats.enriched}</strong> enriched
-            </div>
-            <div style="background: #fef2f2; padding: 0.5rem 1rem; border-radius: 8px;">
-              <strong>${data.stats.flagged}</strong> flagged
-            </div>
-            <div style="background: #dbeafe; padding: 0.5rem 1rem; border-radius: 8px;">
-              <strong id="inLaneCount">0</strong> in-lane
-            </div>
-            <div style="background: #fef3c7; padding: 0.5rem 1rem; border-radius: 8px;">
-              <strong id="proxyCount">0</strong> proxy
-            </div>
-          </div>
-          <div class="vehicle-list">
-            <div class="vehicle-row header">
-              <div>Lane</div>
-              <div>Vehicle</div>
-              <div>Grade</div>
-              <div>Announcements</div>
-              <div>Action</div>
-            </div>
+        // Render stats
+        document.getElementById('viewStats').innerHTML = `
+          <div class="stat-box"><strong>${data.stats.total}</strong> vehicles</div>
+          <div class="stat-box green"><strong>${data.stats.enriched}</strong> enriched</div>
+          <div class="stat-box red"><strong>${data.stats.flagged}</strong> flagged</div>
+          <div class="stat-box blue"><strong id="inLaneCount">0</strong> in-lane</div>
+          <div class="stat-box yellow"><strong id="proxyCount">0</strong> proxy</div>
         `;
 
+        // Render table header
+        document.getElementById('tableHeader').innerHTML = `
+          <tr>
+            <th>Lane</th>
+            <th>Lot</th>
+            <th>VIN</th>
+            <th>Year</th>
+            <th>Make</th>
+            <th>Model</th>
+            <th>Mileage</th>
+            <th>Grade</th>
+            <th>Announcements</th>
+            <th>Action</th>
+          </tr>
+        `;
+
+        // Render table body
+        const vehicles = data.vehicles;
+        let bodyHtml = '';
+
         for (const v of vehicles) {
-          const laneRun = v.lane && v.lot ? `${v.lane}-${v.lot}` : (v.lot || '-');
           const gradeClass = v.grade ? (v.grade >= 4 ? 'grade-good' : v.grade >= 3 ? 'grade-ok' : 'grade-bad') : '';
           const isFlagged = v.flags && v.flags.length > 0;
           const bid = currentBids[v.id];
           const bidType = bid ? bid.bid_type : null;
+          const announcements = (v.announcements || '').replace(/\|/g, ' | ');
 
-          html += `
-            <div class="vehicle-row ${isFlagged ? 'flagged' : ''}" id="row-${v.id}">
-              <div><strong>${laneRun}</strong></div>
-              <div style="font-size: 0.8rem;">${v.year} ${v.make} ${v.model}</div>
-              <div>${v.grade ? `<span class="grade-badge ${gradeClass}">${v.grade}</span>` : '-'}</div>
-              <div style="font-size: 0.7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${(v.announcements || '').replace(/\|/g, '; ')}">${(v.announcements || '').replace(/\|/g, '; ').slice(0, 30)}${(v.announcements || '').length > 30 ? '...' : ''}</div>
-              <div class="bid-actions">
-                <button class="bid-btn in-lane ${bidType === 'in-lane' ? 'active' : ''}" onclick="setBid(${v.id}, 'in-lane')">In-Lane</button>
-                <button class="bid-btn proxy ${bidType === 'proxy' ? 'active' : ''}" onclick="setBid(${v.id}, 'proxy')">Proxy</button>
-                <button class="bid-btn pass ${bidType === 'pass' ? 'active' : ''}" onclick="setBid(${v.id}, 'pass')">Pass</button>
-              </div>
-            </div>
+          bodyHtml += `
+            <tr class="${isFlagged ? 'flagged' : ''}" id="row-${v.id}">
+              <td><strong>${v.lane || '-'}</strong></td>
+              <td>${v.lot || '-'}</td>
+              <td class="vin-cell">${v.vin}</td>
+              <td>${v.year || '-'}</td>
+              <td>${v.make || '-'}</td>
+              <td>${v.model || '-'}</td>
+              <td class="mileage-cell">${v.mileage ? v.mileage.toLocaleString() : '-'}</td>
+              <td>${v.grade ? `<span class="grade-badge ${gradeClass}">${v.grade}</span>` : '-'}</td>
+              <td class="announcements-cell" title="${announcements}">${announcements || '-'}</td>
+              <td>
+                <div class="bid-actions">
+                  <button class="bid-btn in-lane ${bidType === 'in-lane' ? 'active' : ''}" onclick="setBid(${v.id}, 'in-lane')">In-Lane</button>
+                  <button class="bid-btn proxy ${bidType === 'proxy' ? 'active' : ''}" onclick="setBid(${v.id}, 'proxy')">Proxy</button>
+                  <button class="bid-btn pass ${bidType === 'pass' ? 'active' : ''}" onclick="setBid(${v.id}, 'pass')">Pass</button>
+                </div>
+              </td>
+            </tr>
           `;
         }
 
-        html += '</div>';
-        html += `
-          <div class="quick-actions">
-            <a href="/api/runlist/${id}/export" class="btn-success" style="text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px;">Export CSV</a>
-            <button class="btn-secondary" onclick="closeModal()">Close</button>
-          </div>
+        document.getElementById('tableBody').innerHTML = bodyHtml;
+
+        // Render footer
+        document.getElementById('viewFooter').innerHTML = `
+          <a href="/api/runlist/${id}/export" class="btn-success" style="text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px; background: #10b981; color: white;">Export CSV</a>
+          <button class="btn-secondary" onclick="closeView()" style="padding: 0.5rem 1rem; border-radius: 6px; background: #e5e7eb; border: none; cursor: pointer;">Back to Calendar</button>
         `;
 
-        document.getElementById('modalContent').innerHTML = html;
         updateBidCounts();
       } catch (err) {
-        document.getElementById('modalContent').innerHTML = `<p style="color: #ef4444;">Error: ${err.message}</p>`;
+        document.getElementById('tableBody').innerHTML = `<tr><td colspan="10" style="color:#ef4444;padding:2rem;">Error: ${err.message}</td></tr>`;
       }
     }
 
@@ -545,8 +597,8 @@
       if (proxyEl) proxyEl.textContent = proxy;
     }
 
-    function closeModal() {
-      document.getElementById('auctionModal').classList.remove('active');
+    function closeView() {
+      document.getElementById('vehicleView').classList.remove('active');
     }
   </script>
 </body>
