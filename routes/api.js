@@ -535,12 +535,12 @@ router.post('/runlist/:id/rematch', async (req, res) => {
 // Debug endpoint - compare data formats between historical_sales and runlist_vehicles
 router.get('/debug/data-formats', async (req, res) => {
   try {
-    // Get sample from historical_sales
+    // Get sample from historical_sales (include all columns)
     const historicalSample = await pool.query(`
-      SELECT DISTINCT make, model, year
+      SELECT *
       FROM historical_sales
       ORDER BY make, model
-      LIMIT 20
+      LIMIT 5
     `);
 
     // Get sample from runlist_vehicles
