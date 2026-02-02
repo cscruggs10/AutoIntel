@@ -446,6 +446,33 @@
     .enrich-btn.queue:disabled { background: #9ca3af; cursor: not-allowed; }
     .enrich-btn.view { background: #e5e7eb; color: #374151; }
     .enrich-btn.view:hover { background: #d1d5db; }
+    /* Filter toggle styles */
+    .filter-toggle {
+      display: flex;
+      gap: 0.25rem;
+      background: #e5e7eb;
+      padding: 0.25rem;
+      border-radius: 8px;
+      margin-left: auto;
+    }
+    .filter-btn {
+      padding: 0.375rem 0.75rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 500;
+      background: transparent;
+      color: #6b7280;
+      transition: all 0.2s;
+    }
+    .filter-btn:hover { color: #374151; }
+    .filter-btn.active {
+      background: white;
+      color: #374151;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .vehicle-table tr.hidden { display: none; }
   </style>
 </head>
 <body>
@@ -646,13 +673,23 @@
           }
         }
 
-        // Render stats
+        // Count matched vehicles
+        const matchedCount = data.vehicles.filter(v => v.matched).length;
+
+        // Render stats with filter toggle
         document.getElementById('viewStats').innerHTML = `
           <div class="stat-box"><strong>${data.stats.total}</strong> vehicles</div>
+          <div class="stat-box green"><strong>${matchedCount}</strong> matched</div>
           <div class="stat-box green"><strong>${data.stats.enriched}</strong> enriched</div>
           <div class="stat-box red"><strong>${data.stats.flagged}</strong> flagged</div>
           <div class="stat-box blue"><strong id="inLaneCount">0</strong> in-lane</div>
           <div class="stat-box yellow"><strong id="proxyCount">0</strong> proxy</div>
+          <div class="filter-toggle">
+            <button class="filter-btn" data-filter="all" onclick="filterVehicles('all')">All</button>
+            <button class="filter-btn active" data-filter="matched" onclick="filterVehicles('matched')">Matched</button>
+            <button class="filter-btn" data-filter="enriched" onclick="filterVehicles('enriched')">With Grade</button>
+            <button class="filter-btn" data-filter="flagged" onclick="filterVehicles('flagged')">Flagged</button>
+          </div>
         `;
 
         // Build dynamic columns from CSV data
@@ -687,12 +724,14 @@
         for (const v of vehicles) {
           const gradeClass = v.grade ? (v.grade >= 4 ? 'grade-good' : v.grade >= 3 ? 'grade-ok' : 'grade-bad') : '';
           const isFlagged = v.flags && v.flags.length > 0;
+          const isMatched = v.matched;
+          const isEnriched = v.grade !== null && v.grade !== undefined;
           const bid = currentBids[v.id];
           const bidType = bid ? bid.bid_type : null;
           const announcements = (v.announcements || '').replace(/\|/g, ' | ');
           const rawData = v.raw_csv_data || {};
 
-          bodyHtml += `<tr class="${isFlagged ? 'flagged' : ''}" id="row-${v.id}">`;
+          bodyHtml += `<tr class="${isFlagged ? 'flagged' : ''} ${!isMatched ? 'hidden' : ''}" id="row-${v.id}" data-matched="${isMatched}" data-enriched="${isEnriched}" data-flagged="${isFlagged}">`;
 
           // Add CSV columns dynamically
           for (const col of sortedCsvColumns) {
@@ -805,6 +844,39 @@
 
     function closeView() {
       document.getElementById('vehicleView').classList.remove('active');
+    }
+
+    function filterVehicles(filter) {
+      // Update active button
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === filter);
+      });
+
+      // Filter rows
+      const rows = document.querySelectorAll('#tableBody tr');
+      rows.forEach(row => {
+        const isMatched = row.dataset.matched === 'true';
+        const isEnriched = row.dataset.enriched === 'true';
+        const isFlagged = row.dataset.flagged === 'true';
+
+        let show = false;
+        switch (filter) {
+          case 'all':
+            show = true;
+            break;
+          case 'matched':
+            show = isMatched;
+            break;
+          case 'enriched':
+            show = isEnriched;
+            break;
+          case 'flagged':
+            show = isFlagged;
+            break;
+        }
+
+        row.classList.toggle('hidden', !show);
+      });
     }
 
     // ============================================
