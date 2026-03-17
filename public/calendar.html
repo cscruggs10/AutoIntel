@@ -1014,7 +1014,9 @@
           </div>
           <div class="queue-item-meta">
             ${job.processedVehicles || 0} / ${job.totalVehicles} vehicles
-            ${job.status === 'queued' ? `<button class="queue-cancel-btn" onclick="cancelQueueJob(${job.id})">Cancel</button>` : ''}
+            <button class="queue-cancel-btn" onclick="cancelQueueJob(${job.id})" title="${job.status === 'processing' ? 'Stop enrichment' : 'Cancel'}">
+              ${job.status === 'processing' ? 'Stop' : 'Cancel'}
+            </button>
           </div>
           <div class="queue-progress">
             <div class="queue-progress-bar" style="width: ${job.progress || 0}%"></div>

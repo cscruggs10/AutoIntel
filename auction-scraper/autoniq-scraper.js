@@ -13,11 +13,22 @@ const AUTONIQ_LOGIN_URL = 'https://autoniq.com/app/login?redirect=/app/';
 const AUTONIQ_BASE = 'https://autoniq.com/app/';
 const DELAY_MIN_MS = 500;
 const DELAY_MAX_MS = 1500;
+const MAX_CONSECUTIVE_ERRORS = 5; // Abort after this many failures in a row
 
 // Random delay to avoid detection
 function randomDelay() {
   const delay = Math.floor(Math.random() * (DELAY_MAX_MS - DELAY_MIN_MS + 1)) + DELAY_MIN_MS;
   return new Promise(resolve => setTimeout(resolve, delay));
+}
+
+// Check if we're already on the AutoNiq dashboard
+async function isOnDashboard(page) {
+  try {
+    const dashboardHeader = await page.locator('h1:has-text("Recently Evaluated")').count();
+    return dashboardHeader > 0;
+  } catch {
+    return false;
+  }
 }
 
 // Login to AutoNiq via Okta SSO (two-step flow)
@@ -34,6 +45,27 @@ async function login(page) {
   await page.goto(AUTONIQ_LOGIN_URL, { waitUntil: 'networkidle', timeout: 30000 });
   console.log('  -> Current URL:', page.url());
 
+  // Check if SSO/SAML redirected us straight to the dashboard (already authenticated)
+  if (await isOnDashboard(page)) {
+    console.log('  -> Already authenticated via SSO redirect, skipping login flow');
+    await randomDelay();
+    return;
+  }
+
+  // Also check if we landed on the autoniq app (not login page) — SAML may have auto-logged in
+  const currentUrl = page.url();
+  if (currentUrl.includes('/app/') && !currentUrl.includes('/login') && !currentUrl.includes('/signin')) {
+    // Wait briefly for dashboard to render
+    try {
+      await page.waitForSelector('h1:has-text("Recently Evaluated")', { timeout: 10000 });
+      console.log('  -> SSO auto-login detected, already on dashboard');
+      await randomDelay();
+      return;
+    } catch {
+      console.log('  -> On app page but dashboard not loaded, proceeding with login...');
+    }
+  }
+
   // Step 2: Handle cookie consent if present
   console.log('  -> Step 2: Checking for cookie consent...');
   const acceptButton = page.locator('button:has-text("Accept")');
@@ -46,9 +78,32 @@ async function login(page) {
   console.log('  -> Step 3: Clicking Sign In button...');
   await page.getByRole('button', { name: 'Sign In' }).click();
 
-  // Step 4: Wait for Okta username page and enter username
-  console.log('  -> Step 4: Waiting for Okta Welcome page...');
-  await page.waitForSelector('h2:has-text("Welcome!")', { timeout: 15000 });
+  // Step 4: Wait for either the Okta Welcome page OR a SAML redirect to dashboard
+  console.log('  -> Step 4: Waiting for Okta Welcome page or SAML redirect...');
+  try {
+    // Race: either we get the Okta login form, or SAML redirects us to dashboard
+    await Promise.race([
+      page.waitForSelector('h2:has-text("Welcome!")', { timeout: 20000 }),
+      page.waitForSelector('h1:has-text("Recently Evaluated")', { timeout: 20000 })
+    ]);
+  } catch (err) {
+    // Check if we ended up on dashboard despite the timeout
+    if (await isOnDashboard(page)) {
+      console.log('  -> SAML redirect completed, already on dashboard');
+      await randomDelay();
+      return;
+    }
+    throw new Error(`Login failed: neither Okta page nor dashboard appeared. URL: ${page.url()}`);
+  }
+
+  // If SAML took us directly to dashboard, we're done
+  if (await isOnDashboard(page)) {
+    console.log('  -> SAML redirect to dashboard, login complete');
+    await randomDelay();
+    return;
+  }
+
+  // Otherwise continue with username/password flow
   console.log('  -> On Okta page, entering username...');
   await page.getByRole('textbox', { name: 'Username' }).fill(username);
 
@@ -278,12 +333,21 @@ async function scrapeRunlist(csvPath, auctionName) {
     // Process each VIN
     let processed = 0;
     let errors = 0;
+    let consecutiveErrors = 0;
 
     for (const vehicle of vehicles) {
       const vin = vehicle.Vin || vehicle.VIN || vehicle.vin;
       if (!vin) {
         console.log('Skipping vehicle with no VIN');
         continue;
+      }
+
+      // Circuit breaker: abort if too many consecutive failures
+      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        console.error(`\n⛔ CIRCUIT BREAKER: ${consecutiveErrors} consecutive errors — aborting scraper`);
+        console.error(`Last successful scrape was ${processed} vehicles ago`);
+        console.error(`This usually means the session is permanently broken (e.g., SSO redirect loop)`);
+        break;
       }
 
       try {
@@ -295,6 +359,7 @@ async function scrapeRunlist(csvPath, auctionName) {
 
         if (existing.rows.length > 0) {
           console.log(`✓ ${vin} - already scraped`);
+          consecutiveErrors = 0; // DB check succeeded, connection is fine
           continue;
         }
 
@@ -306,6 +371,7 @@ async function scrapeRunlist(csvPath, auctionName) {
         await storeVehicle(vin, auctionName, data.grade, rawAnnouncements);
 
         processed++;
+        consecutiveErrors = 0; // Reset on success
         const announcementPreview = data.announcements.length > 0
           ? data.announcements.join('; ').substring(0, 50)
           : 'none';
@@ -314,7 +380,7 @@ async function scrapeRunlist(csvPath, auctionName) {
       } catch (error) {
         // If session expired, re-login and retry this VIN
         if (error.message === 'SESSION_EXPIRED' || error.message.includes('login') || error.message.includes('unauthorized')) {
-          console.log(`⚠ Session expired, re-logging in...`);
+          console.log(`⚠ Session expired, re-logging in... (consecutive errors: ${consecutiveErrors + 1}/${MAX_CONSECUTIVE_ERRORS})`);
           try {
             await login(page);
             console.log(`⚠ Re-login successful, retrying ${vin}...`);
@@ -325,6 +391,7 @@ async function scrapeRunlist(csvPath, auctionName) {
             await storeVehicle(vin, auctionName, retryData.grade, retryAnnouncements);
 
             processed++;
+            consecutiveErrors = 0; // Reset on success
             const announcementPreview = retryData.announcements.length > 0
               ? retryData.announcements.join('; ').substring(0, 50)
               : 'none';
@@ -333,15 +400,26 @@ async function scrapeRunlist(csvPath, auctionName) {
           } catch (retryError) {
             console.error(`✗ ${vin} - Retry failed: ${retryError.message}`);
             errors++;
+            consecutiveErrors++;
           }
         } else {
           errors++;
-          console.error(`✗ ${vin} - Error: ${error.message}`);
+          consecutiveErrors++;
+          console.error(`✗ ${vin} - Error: ${error.message} (consecutive errors: ${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})`);
         }
       }
 
       // Rate limiting
       await randomDelay();
+    }
+
+    // If circuit breaker triggered, exit with error code
+    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+      console.error(`\n=== Scraping ABORTED (circuit breaker) ===`);
+      console.error(`Processed: ${processed}`);
+      console.error(`Errors: ${errors}`);
+      console.error(`Total: ${vehicles.length}`);
+      throw new Error(`Circuit breaker: ${consecutiveErrors} consecutive failures. Likely SSO/session issue.`);
     }
 
     console.log(`\n=== Scraping Complete ===`);
